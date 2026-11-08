@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { scanMcpServer } from './scanner';
+import { scanMcpServer, ScanResult } from './scanner';
 
 const program = new Command();
 
@@ -14,7 +14,7 @@ program
   .argument('<url>', 'MCP server URL to scan')
   .option('-r, --report <format>', 'Output format (json, text)', 'text')
   .option('-v, --verbose', 'Verbose output')
-  .action(async (url, options) => {
+  .action(async (url: string, options: { report?: string; verbose?: boolean }) => {
     try {
       console.log(`🔍 Scanning ${url}...\n`);
       
@@ -25,13 +25,14 @@ program
       } else {
         printReport(result);
       }
-    } catch (error) {
-      console.error('❌ Scan failed:', error.message);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error('❌ Scan failed:', err.message);
       process.exit(1);
     }
   });
 
-function printReport(result) {
+function printReport(result: ScanResult) {
   console.log('═'.repeat(50));
   console.log('MCP Security Scan Report');
   console.log('═'.repeat(50));
@@ -54,7 +55,7 @@ function printReport(result) {
   // Issues
   if (result.issues.length > 0) {
     console.log('Issues Found:');
-    result.issues.forEach((issue, i) => {
+    result.issues.forEach((issue: { severity: string; description: string; fix?: string }, i: number) => {
       console.log(`  ${i + 1}. [${issue.severity}] ${issue.description}`);
       if (issue.fix) {
         console.log(`     Fix: ${issue.fix}`);
