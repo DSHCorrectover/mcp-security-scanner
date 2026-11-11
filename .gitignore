@@ -1,5 +1,5 @@
 node_modules/
-dist/
-.npmrc
+leads.json
+.env
 *.log
 .DS_Store
