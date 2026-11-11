@@ -4,6 +4,7 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 1.3.x   | :white_check_mark: |
 | 1.2.x   | :white_check_mark: |
 | < 1.2   | :x:                |
 
@@ -55,6 +56,56 @@ We believe in transparency. Here is exactly what our security measures do and do
 4. **File-based persistence** — Rate limit counters use JSON files, not Redis. Multi-instance deployments need external state management.
 
 5. **No email delivery** — We validate email format but never send emails. "Check your inbox" messages in API responses are aspirational, not actual.
+
+## Report Integrity (v1.3.0)
+
+Born from CVE-2026-73567 casebook methodology. Three principles enforced structurally:
+
+> **宁可降级，不可升级** — When in doubt, rate lower not higher  
+> **夸大一次，后面所有准确的话都不再被相信** — Exaggerate once, lose all credibility  
+> **安全不靠纪律，靠结构** — Security relies on structure, not discipline
+
+### A/B/C/NONE Grading
+
+Every tool result carries a grade with strict wording boundaries:
+
+| Grade | Definition | What We Can Say | What We Cannot Say |
+|-------|-----------|-----------------|-------------------|
+| **A** | Critical indicator | "Risk indicator matched: {keyword} found in tool {field}" | "This tool WILL execute commands / move funds" |
+| **B** | Elevated indicator | "Risk indicator matched, may indicate {category} operations" | "This tool handles credentials / writes files" |
+| **C** | Informational | "Possible risk indicator, context-dependent" | "This tool has risk" |
+| **NONE** | No indicators | "No risk indicators detected by keyword analysis" | "This tool is safe" / "Zero risk" |
+
+### Forbidden Claims (Machine-Checked)
+
+Every report passes an automated self-check against 8 forbidden claims before emission:
+
+1. Cannot guarantee a tool/server is safe
+2. Cannot claim "zero risk" or "100% secure"
+3. Cannot claim to scan the full 229K census (free tier uses 5 keyword categories)
+4. Cannot reference CVE numbers (we do keyword matching, not CVE mapping)
+5. Cannot claim tools are "exploitable" or "vulnerable to attack"
+6. Cannot claim to have scanned repositories (we scan user-provided manifests)
+7. Cannot claim certification as secure/safe/compliant
+8. Cannot present CCS signatures as security attestations
+
+### Banner Separation
+
+| Banner | Source | Evidentiary Value |
+|--------|--------|-------------------|
+| **A** (keyword-match) | Free tier: pattern matching against tool name/description | Risk indicator only. Requires human review. |
+| **B** (census-verified) | Pro tier: cross-referenced against 229K MCP Census | Higher confidence. Observed in production census. |
+
+**Banner A results are never presented as Banner B evidence.** The two are structurally separated in every report.
+
+### Data Provenance
+
+Every number in a report carries:
+- Source (keyword matching engine version)
+- Census reference date (2026-10-12 snapshot)
+- Methodology (keyword matching against name + description)
+- Limitations (does not analyze source code, runtime behavior, or manifest claims)
+- False positive calibration per grade
 
 ## Data Collection
 

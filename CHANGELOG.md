@@ -1,7 +1,78 @@
-# Security Hardening Changelog - v1.1.0
+# Security Hardening Changelog
 
-## Overview
-Addressed three critical categories of security and commercial tracking issues identified during pre-launch review.
+## v1.3.0 — Report Integrity (CVE-2026-73567 Casebook Integration)
+
+### Overview
+Applied lessons from CVE-2026-73567 casebook (19 files, commit 17fe2e0) to enforce structural honesty in every scan report. Three principles: 宁可降级不可升级 / 夸大一次失去所有可信度 / 安全靠结构不靠纪律.
+
+### New: `src/report-integrity.js` Module
+- **Forbidden Claims** — 8 machine-checked constraints that run before every report emission
+- **A/B/C/NONE Grading** — Each grade has explicit "can say" and "cannot say" wording boundaries
+- **Banner Separation** — Banner A (keyword match) and Banner B (census verified) never merge
+- **Data Provenance** — Every number carries source, time window, methodology, and limitations
+- **Downgrade Principle** — Low confidence automatically downgrades grade
+- **Self-Check** — Automated forbidden-claims scan on every report JSON before emission
+
+### Scanner Changes
+- `analyzeTools()` now uses `analyzeToolWithGrading()` from integrity module
+- `generateReport()` includes full integrity block with grading, provenance, banner separation
+- Report `api_key` field replaced with `api_key_hash` (never expose plaintext key hash in report)
+- Summary line changed from "X risks detected" to "X indicators matched" (honest framing)
+- All upgrade/trial messages now clarify "indicators are not confirmed vulnerabilities"
+- Health endpoint reports v1.3.0 with integrity features
+
+### SECURITY.md Updates
+- Added "Report Integrity (v1.3.0)" section with grading table
+- Added forbidden claims list (8 items)
+- Added banner separation table
+- Added data provenance requirements
+
+---
+
+## v1.2.0 — Security Hardening
+
+### Overview
+Addressed detailed security review feedback. Replaced superficial fixes with production-grade implementations.
+
+### HMAC-SHA256 Signatures (`src/signature.js`)
+- Replaced fake SHA-256 "signatures" with real HMAC-SHA256
+- `signReport(reportData)` — canonical string → HMAC-SHA256 → 64-char hex
+- `verifySignature()` — constant-time comparison via `crypto.timingSafeEqual`
+- `generateVerifyToken()` / `verifyToken()` — short-lived (24hr) tokens for public verify_url
+
+### API Key Hashing
+- `hashApiKey(key)` — SHA-256 hash, stored in `api-keys.json`
+- Plaintext key returned ONCE at creation, never stored
+- All validation compares hashes, not plaintext
+
+### Trusted Proxy IP Parsing (`src/rate-limit.js`)
+- `TRUSTED_PROXIES` whitelist: 127.0.0.1, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+- `getClientIP(req)` — only trusts X-Forwarded-For from whitelisted proxy IPs
+- `getDeviceFingerprint(req)` — SHA-256 hash of User-Agent + Accept-Language + Accept-Encoding + sec-ch-ua
+
+### Multi-Dimensional Rate Limiting
+- Per-IP hourly limit + per-device hourly limit + global daily quota
+- Global quotas: keys 100/day, registrations 50/day, scans 1000/day
+- File-based atomic locking via `mkdir` (prevents TOCTOU race conditions)
+
+### Input Validation (`src/validation.js`)
+- `sanitizeInput(obj)` — removes `__proto__`, `constructor`, `prototype` keys
+- `containsHomoglyphs(str)` — detects Cyrillic, Greek, CJK, fullwidth characters in emails
+- `validateScanRequest()` — max 50 tools, name/description length limits
+- `limitBodySize` middleware — 1MB max request body
+
+### IDOR Protection
+- Reports scoped to API key hash owner
+- `/report/:reportId` returns 403 for cross-user access
+- `verify_url` exposes summary + hash only, not full report details
+
+### CLI (`src/cli.js`)
+- `--no-telemetry` flag for self-hosted mode
+- Config stored at `~/.mcp-scanner/config.json` with mode 0o600
+
+---
+
+## v1.1.0 — Initial Security Hardening
 
 ## 1. Commercial Tracking Bypass Risks - FIXED
 
