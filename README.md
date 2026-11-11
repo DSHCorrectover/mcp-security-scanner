@@ -1,97 +1,106 @@
 # MCP Security Scanner
 
-The open-source security scanner for MCP (Model Context Protocol) servers.
+**Scan any MCP server for security risks. 30 seconds. Free.**
 
-Used by Correctover to audit 42,000+ MCP servers. Find vulnerabilities, get security scores, and earn your security badge.
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-[![MCP Security](https://e58a1155.correctover-web.pages.dev/badges/opensource.svg)](https://correctover.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## What it does
 
-## 🚀 Quick Start
+Input an MCP server's tool list → get a security risk report with CCS verification.
 
 ```bash
 # Install
-npm install -g @correctover/mcp-scanner
+npm install -g mcp-security-scanner
 
-# Scan your MCP server
-mcp-scan https://your-mcp-server.com
-
-# Get detailed report
-mcp-scan https://your-mcp-server.com --report json
+# Scan
+mcp-scan --tools tools.json
 ```
 
-## 🔍 What It Checks
-
-| Category | Check | Severity |
-|----------|-------|----------|
-| **Authentication** | OAuth 2.1, API keys, token validation | 🔴 Critical |
-| **HTTPS/TLS** | Certificate validity, protocol version | 🔴 Critical |
-| **Tool Permissions** | Least privilege, scope validation | 🟡 High |
-| **Credential Exposure** | API keys, secrets in config | 🔴 Critical |
-| **Misconfigurations** | Default settings, open endpoints | 🟡 High |
-
-## 📊 Security Score
-
-Your server gets a score from 0-100:
-
-- **80-100:** ✅ Secure - Ready for production
-- **60-79:** ⚠️ Needs improvement - Review warnings
-- **0-59:** 🔴 Critical issues - Fix before production
-
-## 🏆 Get Your Badge
-
-After scanning, add this badge to your README:
-
-```markdown
-[![MCP Security Score](https://e58a1155.correctover-web.pages.dev/badges/85.svg)](https://correctover.com/scan?url=your-server)
-```
-
-Badge preview:
-
-![MCP Security Score](https://e58a1155.correctover-web.pages.dev/badges/85.svg)
-
-## 📈 Industry Benchmarks
-
-Based on our audit of 42,163 MCP servers:
-
-- **48.8%** have zero authentication
-- **99%** are misconfigured
-- **7,000+** are publicly exposed
-- **Average score:** 52/100
-
-Where does your server stand?
-
-## 🛠️ Development
+## Quick Start
 
 ```bash
-# Clone
-git clone https://github.com/DSHCorrectover/mcp-security-scanner.git
+# 1. Get free API key (no credit card)
+curl -X POST http://localhost:3001/create-key \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@company.com"}'
 
-# Install dependencies
-npm install
-
-# Run tests
-npm test
-
-# Build
-npm run build
+# 2. Scan tools
+curl -X POST http://localhost:3001/scan \
+  -H "X-API-Key: mcp_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "server_url": "https://example-mcp.com",
+    "tools": [
+      {"name": "transfer_funds", "description": "Transfer money between accounts"},
+      {"name": "read_file", "description": "Read a file from disk"},
+      {"name": "exec_command", "description": "Execute shell command"}
+    ]
+  }'
 ```
 
-## 🤝 Contributing
+## Output
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+```json
+{
+  "report_id": "scan_abc123",
+  "summary": {
+    "total_tools": 3,
+    "total_risks": 3,
+    "critical": 2,
+    "high": 0,
+    "ccs_required": 2
+  },
+  "tools": [
+    {
+      "tool": "transfer_funds",
+      "risks": [{"rule": "funds_movement", "severity": "CRITICAL"}],
+      "ccs_required": true
+    },
+    {
+      "tool": "exec_command",
+      "risks": [{"rule": "command_execution", "severity": "CRITICAL"}],
+      "ccs_required": true
+    }
+  ],
+  "verification": {
+    "verify_url": "https://api.correctover.com/verify/scan_abc123",
+    "upgrade_msg": "2 tools need CCS verification. Upgrade to verify all."
+  }
+}
+```
 
-## 📄 License
+## Risk Categories
 
-MIT License - see [LICENSE](LICENSE) for details.
+Based on our census of **229,539 MCP tools**:
 
-## 🔗 Links
+| Category | Severity | Examples |
+|----------|----------|----------|
+| Funds Movement | CRITICAL | transfer, payment, withdraw |
+| Command Execution | CRITICAL | exec, shell, bash |
+| Credential Handling | HIGH | password, token, secret |
+| File/DB Write | HIGH | write, create, delete |
+| Infrastructure Mutation | HIGH | deploy, scale, terminate |
 
-- **Website:** https://correctover.com
-- **Free Scanner:** https://e58a1155.correctover-web.pages.dev/scan.html
-- **Security Leaderboard:** https://e58a1155.correctover-web.pages.dev/leaderboard.html
-- **Report Issues:** https://github.com/DSHCorrectover/mcp-security-scanner/issues
+## Pricing
 
----
+| Tier | Price | Scans | Features |
+|------|-------|-------|----------|
+| Free | $0 | 5/month | Basic risk scan |
+| Pro | $49/mo | Unlimited | Full 229K DB, CCS verification, compliance reports |
+| Enterprise | Custom | Unlimited | Custom rules, SLA, support |
 
-**Securing the MCP ecosystem, one server at a time.**
+**Free tier: no credit card required.**
+
+## Why CCS?
+
+Every scan report is signed with CCS (Cryptographic Commitment Scheme). This means:
+- Reports are tamper-proof
+- Can be used as audit evidence
+- Verifiable offline
+- IETF standard (draft-correctover-ccs-11)
+
+## Links
+
+- [Website](https://correctover.com)
+- [CCS Verifier](https://github.com/DSHCorrectover/ccs-verifier-mcp)
+- [IETF Draft](https://datatracker.ietf.org/doc/draft-correctover-ccs/)
