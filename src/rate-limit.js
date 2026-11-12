@@ -3,19 +3,23 @@
  * 
  * Fixes three bypass vectors:
  * 1. X-Forwarded-For spoofing - only trust proxies in whitelist
- * 2. In-memory counters - uses file persistence (Redis-ready interface)
+ * 2. In-memory counters - uses file persistence with atomic locking (Redis-ready interface)
  * 3. Proxy pools - adds global quota + device fingerprint fallback
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '..', 'data');
+// Must honour the same CCS_DATA_DIR override as scanner.js, otherwise rate
+// counters stay in the production directory even when the rest of the state
+// is isolated. See the note in scanner.js.
+const DATA_DIR = process.env.CCS_DATA_DIR || join(__dirname, '..', 'data');
 const RATE_LIMIT_FILE = join(DATA_DIR, 'rate-limits.json');
 const GLOBAL_QUOTA_FILE = join(DATA_DIR, 'global-quota.json');
+const LOCK_DIR = join(DATA_DIR, '.lock');
 
 // Trusted proxy IPs (only these X-Forwarded-For headers are believed)
 // In production, load from environment
@@ -39,6 +43,36 @@ function loadJSON(file, defaultVal) {
 
 function saveJSON(file, data) {
   writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+// Atomic file locking using mkdir (atomic on most filesystems)
+function acquireLock(lockName, maxRetries = 10, retryDelay = 1) {
+  const lockPath = `${LOCK_DIR}-${lockName}`;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      mkdirSync(lockPath, { recursive: false });
+      return lockPath;
+    } catch (e) {
+      if (e.code === 'EEXIST') {
+        // Lock exists, wait and retry
+        const start = Date.now();
+        while (Date.now() - start < retryDelay * 100) {
+          // Busy wait (short duration)
+        }
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error(`Failed to acquire lock: ${lockName}`);
+}
+
+function releaseLock(lockPath) {
+  try {
+    rmdirSync(lockPath);
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
 }
 
 /**
@@ -136,7 +170,7 @@ export function getDeviceFingerprint(req) {
 }
 
 /**
- * Rate limiter with multiple dimensions
+ * Rate limiter with multiple dimensions (atomic with file locking)
  * 
  * @param {string} key - Rate limit key (IP, device, or global)
  * @param {string} endpoint - Endpoint being rate limited
@@ -145,42 +179,47 @@ export function getDeviceFingerprint(req) {
  * @returns {Object} { allowed: boolean, remaining: number, reset: number }
  */
 export function checkRateLimit(key, endpoint, limit, windowMs) {
-  const rateLimits = loadJSON(RATE_LIMIT_FILE, {});
-  const now = Date.now();
-  const rateKey = `${key}:${endpoint}`;
-  
-  if (!rateLimits[rateKey]) {
-    rateLimits[rateKey] = { count: 1, reset: now + windowMs };
+  const lock = acquireLock('rate-limit');
+  try {
+    const rateLimits = loadJSON(RATE_LIMIT_FILE, {});
+    const now = Date.now();
+    const rateKey = `${key}:${endpoint}`;
+    
+    if (!rateLimits[rateKey]) {
+      rateLimits[rateKey] = { count: 1, reset: now + windowMs };
+      saveJSON(RATE_LIMIT_FILE, rateLimits);
+      return { allowed: true, remaining: limit - 1, reset: now + windowMs };
+    }
+    
+    // Window expired, reset
+    if (now > rateLimits[rateKey].reset) {
+      rateLimits[rateKey] = { count: 1, reset: now + windowMs };
+      saveJSON(RATE_LIMIT_FILE, rateLimits);
+      return { allowed: true, remaining: limit - 1, reset: now + windowMs };
+    }
+    
+    // Check limit
+    if (rateLimits[rateKey].count >= limit) {
+      return {
+        allowed: false,
+        remaining: 0,
+        reset: rateLimits[rateKey].reset,
+        retry_after: Math.ceil((rateLimits[rateKey].reset - now) / 1000)
+      };
+    }
+    
+    // Increment
+    rateLimits[rateKey].count++;
     saveJSON(RATE_LIMIT_FILE, rateLimits);
-    return { allowed: true, remaining: limit - 1, reset: now + windowMs };
-  }
-  
-  // Window expired, reset
-  if (now > rateLimits[rateKey].reset) {
-    rateLimits[rateKey] = { count: 1, reset: now + windowMs };
-    saveJSON(RATE_LIMIT_FILE, rateLimits);
-    return { allowed: true, remaining: limit - 1, reset: now + windowMs };
-  }
-  
-  // Check limit
-  if (rateLimits[rateKey].count >= limit) {
+    
     return {
-      allowed: false,
-      remaining: 0,
-      reset: rateLimits[rateKey].reset,
-      retry_after: Math.ceil((rateLimits[rateKey].reset - now) / 1000)
+      allowed: true,
+      remaining: limit - rateLimits[rateKey].count,
+      reset: rateLimits[rateKey].reset
     };
+  } finally {
+    releaseLock(lock);
   }
-  
-  // Increment
-  rateLimits[rateKey].count++;
-  saveJSON(RATE_LIMIT_FILE, rateLimits);
-  
-  return {
-    allowed: true,
-    remaining: limit - rateLimits[rateKey].count,
-    reset: rateLimits[rateKey].reset
-  };
 }
 
 /**
@@ -190,37 +229,42 @@ export function checkRateLimit(key, endpoint, limit, windowMs) {
  * @returns {Object} { allowed: boolean, remaining: number }
  */
 export function checkGlobalQuota(action) {
-  const quotas = loadJSON(GLOBAL_QUOTA_FILE, {});
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  
-  if (!quotas[today]) {
-    quotas[today] = { keys: 0, registrations: 0, scans: 0 };
-  }
-  
-  const quotaKey = `${action}_per_day`;
-  const currentCount = quotas[today][action] || 0;
-  const limit = GLOBAL_QUOTA[quotaKey];
-  
-  if (currentCount >= limit) {
+  const lock = acquireLock('global-quota');
+  try {
+    const quotas = loadJSON(GLOBAL_QUOTA_FILE, {});
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    if (!quotas[today]) {
+      quotas[today] = { keys: 0, registrations: 0, scans: 0 };
+    }
+    
+    const quotaKey = `${action}_per_day`;
+    const currentCount = quotas[today][action] || 0;
+    const limit = GLOBAL_QUOTA[quotaKey];
+    
+    if (currentCount >= limit) {
+      return {
+        allowed: false,
+        remaining: 0,
+        limit,
+        used: currentCount,
+        reset: 'tomorrow (UTC)'
+      };
+    }
+    
+    // // Increment
+    quotas[today][action] = currentCount + 1;
+    saveJSON(GLOBAL_QUOTA_FILE, quotas);
+    
     return {
-      allowed: false,
-      remaining: 0,
+      allowed: true,
+      remaining: limit - (currentCount + 1),
       limit,
-      used: currentCount,
-      reset: 'tomorrow (UTC)'
+      used: currentCount + 1
     };
+  } finally {
+    releaseLock(lock);
   }
-  
-  // Increment
-  quotas[today][action] = currentCount + 1;
-  saveJSON(GLOBAL_QUOTA_FILE, quotas);
-  
-  return {
-    allowed: true,
-    remaining: limit - (currentCount + 1),
-    limit,
-    used: currentCount + 1
-  };
 }
 
 /**

@@ -256,10 +256,10 @@ function showPricing() {
 
 FREE TIER - $0/month
   • 5 scans per month
-  • Basic risk scan (5 rules from 229K MCP Census)
+  • Basic risk scan (5 keyword categories, defined locally — not derived from census data)
   • 50 tools per scan
   • HMAC-SHA256 signed reports
-  • False positive calibration
+  • Match-rate evidence with source, window, and retrieval date
   • Community support
 
 PRO TIER - $49/month

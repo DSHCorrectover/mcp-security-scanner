@@ -3,3 +3,6 @@ leads.json
 .env
 *.log
 .DS_Store
+
+# runtime state — written by the live server, never a source of truth for the repo
+data/

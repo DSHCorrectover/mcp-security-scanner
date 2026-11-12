@@ -47,7 +47,18 @@ We believe in transparency. Here is exactly what our security measures do and do
 
 ### Known Limitations
 
-1. **Static keyword matching** — The 5 risk rules use pattern matching against tool names and descriptions. False positives are expected. Every report includes calibration: "approximately X may be false positives."
+1. **Static keyword matching** — The 5 risk categories are matched against tool names and descriptions. False positives are expected, and **we do not publish a false-positive rate, because we have never measured one.** What we did measure (2026-11-12, local census slice: 16,446 parsed tool rows, 7.16% coverage of the census tool population — a truncated slice, not full coverage):
+
+   | Matcher | A-grade verdicts | Share of slice |
+   |---|---|---|
+   | substring (≤ v1.3.0) | 4,547 | 27.6% |
+   | word-boundary (v1.3.1) | 507 | 3.1% |
+
+   Of the 4,547 substring verdicts, **1,982 (43.6%) fired only because a keyword sat inside a longer word** — `execution`→`exec`, `runtime`/`runs`/`truncated`→`run`, `configured`→`configure`, `buyer`/`seller`→`buy`/`sell`, `withdrawal`→`withdraw`.
+
+   This is a **match-rate** measurement, not a false-positive-rate measurement. A drop from 4,547 to 507 tells you the artifact count, not the residual error count. Earlier revisions of this document stated "10-15% false positive rate for A grade"; that figure was never measured and has been removed. Full-census re-measurement is pending. These numbers **must not** be presented as coverage of the full census.
+
+   This matters commercially: the A-grade count is exactly what triggers the paid Pro-trial prompt, so the substring artifact was selling upgrades off a regex bug.
 
 2. **No runtime analysis** — We analyze tool metadata, not execution behavior. A tool named `get_weather` could theoretically do anything at runtime.
 
@@ -57,7 +68,7 @@ We believe in transparency. Here is exactly what our security measures do and do
 
 5. **No email delivery** — We validate email format but never send emails. "Check your inbox" messages in API responses are aspirational, not actual.
 
-## Report Integrity (v1.3.0)
+## Report Integrity (v1.3.0, matcher revised in v1.3.1)
 
 Born from CVE-2026-73567 casebook methodology. Three principles enforced structurally:
 
@@ -105,7 +116,8 @@ Every number in a report carries:
 - Census reference date (2026-10-12 snapshot)
 - Methodology (keyword matching against name + description)
 - Limitations (does not analyze source code, runtime behavior, or manifest claims)
-- False positive calibration per grade
+- Match-rate evidence per grade, each with its source, sample size, coverage percentage and retrieval date
+- An explicit `not_measured` list, currently including any residual false-positive rate and any full-census grade distribution
 
 ## Data Collection
 

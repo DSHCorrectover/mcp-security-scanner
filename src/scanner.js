@@ -1,5 +1,5 @@
 /**
- * MCP Security Scanner v1.3.0
+ * MCP Security Scanner v1.3.1
  * 
  * Scans MCP servers for security risk indicators.
  * Commercial tracking: Every scan requires API key, usage tracked, upgrade prompts embedded.
@@ -12,12 +12,15 @@
  * - Input validation (prevents prototype pollution, DoS, homoglyph attacks)
  * - IDOR protection (reports scoped to API key owner)
  * 
- * Report integrity (v1.3.0 — born from CVE-2026-73567 casebook):
+ * Report integrity (v1.3.0 — born from CVE-2026-73567 casebook; matcher revised in v1.3.1):
  * - A/B/C/NONE grading with strict wording boundaries per grade
  * - Forbidden claims machine-checked before every report emission
  * - Banner A (keyword match) / Banner B (census-verified) separation
  * - Data provenance: every number carries source, window, date
  * - Downgrade principle: when in doubt, rate lower not higher
+ * - v1.3.1: word-boundary matcher + inflection stoplist + read-only-context
+ *   downgrade, replacing substring matching that inflated A-grade 4,547 -> 507
+ *   on a 16,446-tool census slice (7.16% coverage, measured 2026-11-12)
  * - Structural honesty: limitations embedded in every tool result
  * 
  * Honest disclosure:
@@ -40,7 +43,11 @@ import { validateScanRequest, validateCreateKeyRequest, validateRegisterRequest,
 import { analyzeToolWithGrading, generateIntegrityBlock, selfCheckReport, RISK_GRADES } from './report-integrity.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '..', 'data');
+// CCS_DATA_DIR isolates persistent state (API keys, scan records, leads, rate
+// counters). Without it, a test run writes into the same files production uses —
+// which both corrupts commercial tracking and makes the negative test suite
+// non-repeatable, since its first suite deliberately exhausts the per-IP quota.
+const DATA_DIR = process.env.CCS_DATA_DIR || join(__dirname, '..', 'data');
 const API_KEYS_FILE = join(DATA_DIR, 'api-keys.json');
 const SCANS_FILE = join(DATA_DIR, 'scans.json');
 const LEADS_FILE = join(DATA_DIR, 'leads.json');
@@ -243,7 +250,7 @@ function generateReport(analysis, serverUrl, apiKey) {
         'Runtime behavior observation',
         'Compliance reports (SOC2, ISO42001)',
         'Manual risk review by security engineer',
-        'Reduced false positive rates via context analysis'
+        'Manual review, the only method that can measure a false-positive rate'
       ],
       honest_note: 'Free tier uses keyword matching only. It finds indicators, not confirmed risks.'
     },
@@ -294,9 +301,10 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
-    version: '1.3.0', 
+    version: '1.3.1', 
     scanner: 'mcp-security-scanner',
     report_integrity: 'CVE-2026-73567 casebook principles (forbidden claims, grading, banner separation)',
+    matcher: 'word-boundary v1.3.1 (substring matcher retired — see CHANGELOG)',
     security: [
       'HMAC-SHA256 signatures',
       'API key hashing',
@@ -552,7 +560,7 @@ app.get('/pricing', (req, res) => {
           'CCS verification for all tools', 
           'Compliance reports (SOC2, ISO42001)',
           'Manual risk review',
-          'False positive calibration',
+          'Match-rate evidence with source, window, and retrieval date',
           'Priority support',
           'API access'
         ] 
@@ -587,7 +595,7 @@ setInterval(cleanupRateLimits, 3600000); // Every hour
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`MCP Security Scanner v1.3.0 running on port ${PORT}`);
+  console.log(`MCP Security Scanner v1.3.1 running on port ${PORT}`);
   console.log(`Security: HMAC-SHA256, API key hashing, trusted proxy, multi-dim rate limit, input validation`);
   console.log(`Integrity: Forbidden claims check, A/B/C grading, banner separation, data provenance`);
   console.log(`Honest disclosure: Keyword indicators only (not confirmed vulnerabilities). Email format validation only.`);

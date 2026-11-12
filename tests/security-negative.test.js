@@ -10,42 +10,114 @@
  * - Prototype pollution
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert';
 import { spawn } from 'child_process';
 import { setTimeout as sleep } from 'timers/promises';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import http from 'node:http';
 
 const TEST_PORT = 3400;
-const BASE_URL = `http://localhost:${TEST_PORT}`;
 
 let serverProcess;
+let testDataDir;
 
-async function request(method, path, body = null, headers = {}) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json', ...headers }
-  };
-  if (body) opts.body = JSON.stringify(body);
-  
-  const res = await fetch(`${BASE_URL}${path}`, opts);
-  const data = await res.json();
-  return { status: res.status, data };
+// Each describe block binds to its own loopback source address, so the
+// 127.0.0.0/8 range gives us genuinely distinct TCP peers without any header
+// spoofing. This is what makes the suite repeatable: /create-key is limited to
+// 10 keys/hour/IP, and a single shared 127.0.0.1 meant the first suites to run
+// consumed the budget and everything after them got 429 — 16 "failures" that
+// had nothing to do with the protection under test.
+let ipSlot = 1;
+const nextIp = () => `127.0.0.${ipSlot++ + 1}`;
+let CURRENT_IP = '127.0.0.2';
+
+function request(method, path, body = null, headers = {}, localAddress = CURRENT_IP) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: TEST_PORT,
+        path,
+        method,
+        localAddress,
+        headers: {
+          'Content-Type': 'application/json',
+          // /create-key also limits by device fingerprint (UA + Accept-Language +
+          // Accept-Encoding + sec-ch-ua, 5/hour). A bare http.request sends none
+          // of those, so every test would collapse into one fingerprint and hit
+          // the device limit no matter which IP it bound to. Each test therefore
+          // carries an identity matching its source address.
+          'User-Agent': `ccs-negative-suite/${localAddress}`,
+          ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...headers
+        }
+      },
+      (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => (text += c));
+        res.on('end', () => {
+          let data = null;
+          try { data = JSON.parse(text); } catch { data = text; }
+          resolve({ status: res.statusCode, data });
+        });
+      }
+    );
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
 }
 
 before(async () => {
-  // Start test server
+  // Isolate ALL persistent state (api-keys.json, scans.json, leads.json,
+  // rate-limits.json, global-quota.json) in a throwaway directory. Without
+  // this the suite wrote test keys and test leads into the production data/
+  // directory on every run — commercial tracking contaminated by CI.
+  testDataDir = mkdtempSync(join(tmpdir(), 'ccs-test-state-'));
   serverProcess = spawn('node', ['src/scanner.js'], {
-    env: { ...process.env, PORT: TEST_PORT.toString() },
+    env: {
+      ...process.env,
+      PORT: TEST_PORT.toString(),
+      CCS_DATA_DIR: testDataDir,
+      // The XFF test below asserts that a forwarded header from an UNTRUSTED
+      // peer is ignored. The shipped default trusts loopback plus the private
+      // ranges, so the property under test has to be evaluated with loopback
+      // removed from the allowlist. An empty string will not do it: the code
+      // reads `process.env.TRUSTED_PROXIES || <default>`, so '' falls back to
+      // the default. A placeholder that is never a real peer does.
+      TRUSTED_PROXIES: '198.51.100.1'
+    },
     stdio: 'pipe'
   });
-  await sleep(2000); // Wait for server to start
+  // Wait for readiness rather than a fixed sleep, so a slow start cannot
+  // masquerade as a security failure.
+  for (let i = 0; i < 60; i++) {
+    try {
+      const { status } = await request('GET', '/health', null, {}, '127.0.0.2');
+      if (status === 200) break;
+    } catch {
+      await sleep(100);
+    }
+  }
 });
 
 after(() => {
   if (serverProcess) serverProcess.kill();
+  if (testDataDir) rmSync(testDataDir, { recursive: true, force: true });
 });
 
+// Every suite gets a fresh source IP.
+function suite() {
+  CURRENT_IP = nextIp();
+}
+
 describe('Rate Limiting Bypass Attempts', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should NOT trust X-Forwarded-For from untrusted IP', async () => {
     // Attacker tries to spoof IP via X-Forwarded-For
     const results = [];
@@ -95,6 +167,7 @@ describe('Rate Limiting Bypass Attempts', () => {
 });
 
 describe('Unicode and Homoglyph Attacks', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should reject email with Cyrillic homoglyph', async () => {
     // admin@exаmple.com with Cyrillic 'а' (U+0430) instead of Latin 'a'
     const cyrillicEmail = 'admin@ex\u0430mple.com';
@@ -122,6 +195,7 @@ describe('Unicode and Homoglyph Attacks', () => {
 });
 
 describe('Large Payload DoS Protection', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should reject scan with >50 tools', async () => {
     const { data: keyData } = await request('POST', '/create-key', { email: 'dos@test.com' });
     const apiKey = keyData.key;
@@ -130,7 +204,9 @@ describe('Large Payload DoS Protection', () => {
     const { status, data } = await request('POST', '/scan', { tools }, { 'X-API-Key': apiKey });
     
     assert.strictEqual(status, 400, 'Should reject >50 tools');
-    assert(data.error.includes('50'), 'Error should mention tool limit');
+    // The limit lives in `details`, not in the top-level `error` string
+    // (which is the generic "Invalid request"). Assert against the whole body.
+    assert(JSON.stringify(data).includes('50'), 'Error should mention tool limit');
   });
 
   it('should reject tool name >256 chars', async () => {
@@ -161,6 +237,7 @@ describe('Large Payload DoS Protection', () => {
 });
 
 describe('IDOR (Insecure Direct Object Reference) Protection', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should NOT allow user A to access user B report', async () => {
     // User A creates a scan
     const { data: keyA } = await request('POST', '/create-key', { email: 'userA@test.com' });
@@ -197,6 +274,7 @@ describe('IDOR (Insecure Direct Object Reference) Protection', () => {
 });
 
 describe('Prototype Pollution Protection', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should reject __proto__ in tool definition', async () => {
     const { data: keyData } = await request('POST', '/create-key', { email: 'proto@test.com' });
     const apiKey = keyData.key;
@@ -224,6 +302,7 @@ describe('Prototype Pollution Protection', () => {
 });
 
 describe('Signature Verification', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should use HMAC-SHA256, not plain SHA-256', async () => {
     const { data: keyData } = await request('POST', '/create-key', { email: 'sig@test.com' });
     const apiKey = keyData.key;
@@ -259,6 +338,7 @@ describe('Signature Verification', () => {
 });
 
 describe('Email Validation Edge Cases', () => {
+  beforeEach(() => { CURRENT_IP = nextIp(); }); // fresh source IP per test
   it('should reject empty email', async () => {
     const { status } = await request('POST', '/create-key', { email: '' });
     assert.strictEqual(status, 400, 'Empty email should be rejected');

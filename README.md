@@ -40,22 +40,37 @@ curl -X POST https://api.correctover.com/scan \
   "report_id": "scan_5e64ee2992614aa79d3612fc6a7b9d25",
   "summary": {
     "total_tools": 3,
-    "total_risks": 2,
-    "critical": 2,
-    "high": 0,
-    "ccs_required": 2,
-    "calibration": "2 risk(s) detected. Based on our 229K MCP Census data, approximately 0.4 may be false positives. Upgrade to Pro for manual review."
+    "total_matches": 2,
+    "grades": { "A": 2, "B": 0, "C": 0, "NONE": 1 },
+    "summary_line": "2 tool(s) matched critical-risk indicators. 0 matched elevated indicators. 1 had no matches."
   },
   "tools": [
     {
       "tool": "transfer_funds",
-      "risks": [{"rule": "funds_movement", "severity": "CRITICAL", "description": "Tool can move funds. Requires cryptographic verification."}],
-      "ccs_required": true
-    },
-    {
-      "tool": "exec_command",
-      "risks": [{"rule": "command_execution", "severity": "CRITICAL", "description": "Tool executes commands. High risk."}],
-      "ccs_required": true
+      "overall_grade": "A",
+      "grade_label": "CRITICAL INDICATOR",
+      "match_count": 1,
+      "matcher": "word-boundary v1.3.1",
+      "read_only_context": null,
+      "matches": [
+        {
+          "rule": "funds_movement",
+          "grade": "A",
+          "match_strength": "strong",
+          "matched_keywords": ["transfer", "funds"],
+          "matched_field": "tool_name_token",
+          "banner": "A",
+          "downgraded_by_readonly_context": false,
+          "can_say": ["Risk indicator matched: \"transfer\" found in tool name", "..."],
+          "cannot_say": ["This tool WILL move funds", "..."],
+          "false_positive_note": "Match-rate evidence, 16,446-tool census slice (7.16% coverage, retrieved 2026-11-12): ... Residual A-grade false-positive rate is NOT measured."
+        }
+      ],
+      "limitations": [
+        "Based on word-boundary matching of tool name tokens and description prose",
+        "Does not analyze actual tool behavior or source code",
+        "Absence of indicators does not mean absence of risk"
+      ]
     }
   ],
   "verification": {
@@ -79,23 +94,25 @@ curl -X POST https://api.correctover.com/scan \
 
 ## Risk Categories
 
-From our census of **229,539 MCP tools**:
+Five keyword categories, defined by us. **These are not derived from census statistics** — the census is used for cross-reference in the Pro tier, not to generate these rules.
 
-| Category | Severity | Keywords | False Positive Rate |
-|----------|----------|----------|---------------------|
-| Funds Movement | CRITICAL | transfer, payment, withdraw, deposit | 15% |
-| Command Execution | CRITICAL | exec, run, shell, bash, cmd | 10% |
-| Credential Handling | HIGH | password, token, secret, api_key | 25% |
-| File/DB Write | HIGH | write, create, delete, update, insert | 30% |
-| Infrastructure Mutation | HIGH | deploy, provision, scale, terminate | 20% |
+| Category | Grade ceiling from description-only match | Promoted to A by tool-name token | Keywords |
+|----------|-------------------------------------------|----------------------------------|----------|
+| Funds Movement | B | A | transfer, payment, withdraw, deposit, ... |
+| Command Execution | B | A | exec, run, shell, bash, cmd, ... |
+| Credential Handling | C | B | password, token, secret, api_key, ... |
+| File/DB Write | C | B | write, create, delete, update, insert, ... |
+| Infrastructure Mutation | C | B | deploy, provision, scale, terminate, ... |
 
-**False positive calibration** is included in every report. Upgrade to Pro for manual review.
+Matching is **word-boundary** based and applies an inflection stoplist (`runtime`, `execution`, `buyer`, `withdrawal`, `configured`, … are not treated as matches) plus a read-only-context downgrade.
+
+**We do not publish a false-positive rate.** No FP-rate figure has ever been measured; earlier revisions of this file carried a per-category "False Positive Rate" column with invented numbers, and it has been removed. What has been measured is the match rate on a truncated census slice (16,446 tools, 7.16% coverage, retrieved 2026-11-12): A-grade verdicts fell from 4,547 (27.6%) under substring matching to 507 (3.1%) under word-boundary matching. See [SECURITY.md](SECURITY.md#known-limitations) for the full window and for what remains unmeasured. Manual review is the only way to obtain a false-positive rate.
 
 ## Pricing
 
 | Tier | Price | Scans | Features |
 |------|-------|-------|----------|
-| Free | $0 | 5/month | Basic risk scan, CCS-signed reports, false positive calibration |
+| Free | $0 | 5/month | Basic risk scan, CCS-signed reports, match-rate evidence with window |
 | Pro | $49/mo | Unlimited | Full 229K risk DB, manual review, compliance reports (SOC2, ISO42001), API access |
 | Enterprise | Custom | Unlimited | Custom rules, on-premise, SLA (99.9%), dedicated support |
 
@@ -108,7 +125,7 @@ From our census of **229,539 MCP tools**:
 - **IDOR protection** — Reports scoped to API key, no cross-user access
 - **UUID report IDs** — 128-bit entropy, not enumerable
 - **CCS signatures** — SHA-256 hash ties report to scanning session
-- **False positive calibration** — Every report includes estimated FP rate
+- **Match-rate evidence** — Every report states its sample size, coverage percentage and retrieval date, and lists explicitly which rates remain unmeasured
 
 See [SECURITY.md](SECURITY.md) for full details.
 
@@ -142,9 +159,20 @@ The tracking code is provided for transparency. If you fork and self-host, docum
 
 ## CLI Usage
 
+> **Install note — read this before you install.** There is a package called
+> `mcp-security-scanner` on the npm registry, but **it is not ours**. That name belongs to a
+> different project (maintainer `orhnyldrm`, repository `badchars/mcp-security-scanner`, a
+> TypeScript tool with a 55-tool surface and different dependencies). We have never published
+> this scanner to npm, and `npm install -g mcp-security-scanner` will install someone else's
+> software. Verified against the registry on 2026-11-12. Install from source instead:
+
 ```bash
-# Install globally
-npm install -g mcp-security-scanner
+# Install from this repository
+git clone https://github.com/DSHCorrectover/mcp-security-scanner.git
+cd mcp-security-scanner
+npm ci          # installs exactly what package-lock.json pins
+npm test        # 19 security tests
+npm link        # puts the `mcp-scan` command on your PATH
 
 # Scan a server file
 mcp-scan scan ./my-mcp-server.js --api-key mcp_your_key

@@ -8,13 +8,18 @@
  * - Invalid JSON structures
  */
 
-import { isValidEmail } from './scanner.js';
-
 // Maximum payload sizes
 const MAX_TOOLS_PER_SCAN = 50;
 const MAX_TOOL_NAME_LENGTH = 256;
 const MAX_TOOL_DESCRIPTION_LENGTH = 1024;
 const MAX_REQUEST_BODY_SIZE = 1024 * 1024; // 1MB
+
+// Email validation (moved here to break circular dependency)
+export function isValidEmail(email) {
+  if (!email) return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 254;
+}
 
 /**
  * Validate scan request body
