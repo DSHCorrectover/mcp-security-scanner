@@ -15,12 +15,13 @@ Based on our census of **229,539 MCP tools** across **42,163 servers**, we ident
 
 ```bash
 # 1. Get free API key (email required for verification)
-curl -X POST https://api.correctover.com/create-key \
+# Hosted API is not yet publicly available. The CLI is fully self-hosted:
+npx mcp-security-scanner --no-telemetry ./your-project
   -H "Content-Type: application/json" \
   -d '{"email": "you@company.com"}'
 
 # 2. Scan tools
-curl -X POST https://api.correctover.com/scan \
+curl -X POST http://localhost:8787/scan  # self-hosted endpoint \
   -H "X-API-Key: mcp_your_key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -80,7 +81,7 @@ curl -X POST https://api.correctover.com/scan \
       "public_key": "correctover_public_key",
       "timestamp": 1731234567890
     },
-    "verify_url": "https://api.correctover.com/verify/scan_5e64ee2992614aa79d3612fc6a7b9d25",
+    "verify_path": "reports/scan_5e64ee2992614aa79d3612fc6a7b9d25.json",
     "upgrade_msg": "2 tools need CCS verification. Upgrade to verify all."
   },
   "critical_trial": {
@@ -143,7 +144,7 @@ Every scan report is signed with CCS (Cryptographic Commitment Scheme). This mea
 
 **This project is Apache-2.0 licensed.** You can self-host the full scanner.
 
-**Hosted free tier** (api.correctover.com):
+**Hosted tier** (api.correctover.com) — *not yet publicly available; roadmap*:
 - Commercial tracking (API keys, usage, leads)
 - Rate limiting
 - Email verification
