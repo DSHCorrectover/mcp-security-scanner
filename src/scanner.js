@@ -234,7 +234,7 @@ function generateReport(analysis, serverUrl, apiKey) {
         note: 'CCS signature is a commercial integrity marker, NOT a security attestation.'
       },
       // verify_url only exposes summary + hash, not full report
-      verify_url: `https://api.correctover.com/verify/${reportId}?hash=${signature.substring(0, 16)}`,
+      verify_path: `${reportDir}/${reportId}.json`, // local artifact; hosted verify endpoint not yet available
       upgrade_msg: analysis.total_matches > 0 
         ? `${analysis.total_matches} indicator match(es) found. Pro tier adds census cross-reference (Banner B verification).` 
         : 'No indicators matched. Pro tier adds census cross-reference for deeper assurance.',
