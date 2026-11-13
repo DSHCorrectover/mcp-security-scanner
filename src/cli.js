@@ -22,7 +22,7 @@ function loadConfig() {
       return JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
     }
   } catch (e) {}
-  return { telemetry: true, api_url: 'https://api.correctover.com' };
+  return { telemetry: false, api_url: '' }; // hosted API not yet available; default to self-hosted mode
 }
 
 function saveConfig(config) {
@@ -65,10 +65,10 @@ PRICING:
   Pro:        $49/month, unlimited scans, manual review, compliance reports
   Enterprise: Custom pricing, API access, custom rules, on-premise
 
-  Get your API key: curl -X POST https://api.correctover.com/create-key
+  Hosted API: NOT YET AVAILABLE. The CLI runs fully self-hosted (no external calls).
 
 TELEMETRY & PRIVACY:
-  By default, the CLI connects to api.correctover.com for scanning.
+  The CLI runs locally by default; no data leaves your machine.
   Use --no-telemetry to disable all external calls (self-hosted mode).
   Self-hosted version has ZERO telemetry - no data leaves your machine.
 
@@ -143,7 +143,7 @@ async function scanServer(serverPath, apiKey, noTelemetry) {
     console.log(`Found ${tools.length} tool(s). Scanning...`);
 
     // Call the scanner API
-    const apiUrl = config.api_url || 'https://api.correctover.com';
+    const apiUrl = config.api_url || ''; // hosted API not yet available
     const url = `${apiUrl}/scan`;
     
     const headers = { 'Content-Type': 'application/json' };
@@ -315,7 +315,7 @@ function configureCLI(args) {
   if (args.includes('--telemetry')) {
     config.telemetry = true;
     console.log('✓ Telemetry enabled');
-    console.log('  CLI will connect to api.correctover.com for scanning.');
+    console.log('  CLI runs in self-hosted mode; hosted API is not yet available.');
     changed = true;
   }
   
