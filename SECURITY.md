@@ -140,7 +140,7 @@ Every number in a report carries:
 
 ## Telemetry
 
-### Hosted Version (api.correctover.com)
+### Hosted Version (api.correctover.com) — not yet publicly available; described for the planned hosted tier only
 - All API calls logged for rate limiting and abuse prevention
 - Scan metadata stored for user history
 - Lead data (email, company) stored for enterprise follow-up
