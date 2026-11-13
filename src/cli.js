@@ -292,10 +292,10 @@ HONEST DISCLOSURE:
   • CCS signatures are HMAC-SHA256 (commercial integrity markers)
   • Self-hosted version has ZERO telemetry
 
-Get your API key:
-  curl -X POST https://api.correctover.com/create-key \\
-    -H "Content-Type: application/json" \\
-    -d '{"email": "you@company.com"}'
+Hosted API: NOT YET PUBLICLY AVAILABLE (roadmap).
+Run fully self-hosted: npx mcp-security-scanner --no-telemetry ./your-project
+# (original curl block removed - see README)
+\\
 
 Learn more: github.com/DSHCorrectover/mcp-security-scanner
 `);
