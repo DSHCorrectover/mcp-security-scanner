@@ -74,7 +74,7 @@ let apiKeys = loadJSON(API_KEYS_FILE, {});
 let scans = loadJSON(SCANS_FILE, {});
 let leads = loadJSON(LEADS_FILE, []);
 
-// Risk rules from our 229K MCP Census
+// Risk rules from the frozen MCP census baseline (42,163 servers, DOI 10.5281/zenodo.23333514)
 const RISK_RULES = {
   funds_movement: {
     name: 'Funds Movement',
@@ -245,7 +245,7 @@ function generateReport(analysis, serverUrl, apiKey) {
       free_limit: '5 scans/month',
       pro_url: 'https://correctover.com/pricing',
       pro_features: [
-        'Census cross-reference (Banner B verification against 229K tools)',
+        'Census cross-reference (Banner B verification against the frozen census baseline)',
         'Source code analysis (not just keyword matching)',
         'Runtime behavior observation',
         'Compliance reports (SOC2, ISO42001)',
@@ -437,7 +437,7 @@ app.post('/scan',
       return res.status(429).json({
         error: 'Free limit: 5 scans/month exceeded.',
         upgrade_url: 'https://correctover.com/pricing',
-        upgrade_msg: 'Upgrade to Pro for unlimited scans + full 229K risk database.',
+        upgrade_msg: 'Upgrade to Pro for unlimited scans + full census rule database.',
         scans_used: keyData.scans,
         scans_limit: 5
       });
@@ -556,7 +556,7 @@ app.get('/pricing', (req, res) => {
         price: 49, 
         scans: 'unlimited', 
         features: [
-          'Full 229K risk database', 
+          'Full census rule database', 
           'CCS verification for all tools', 
           'Compliance reports (SOC2, ISO42001)',
           'Manual risk review',

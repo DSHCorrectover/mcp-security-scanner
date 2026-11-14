@@ -9,7 +9,7 @@
 
 Input an MCP server's tool list → get a security risk report with CCS verification.
 
-Based on our census of **229,539 MCP tools** across **42,163 servers**, we identified **5 canonical risk categories** that cover 95% of high-consequence operations.
+Based on our frozen census baseline of **42,163 MCP servers** (2026-10-12, SHA-256 anchored, ODC-BY, [Zenodo DOI 10.5281/zenodo.23333514](https://doi.org/10.5281/zenodo.23333514)), we identified **5 canonical risk categories** that cover 95% of high-consequence operations.
 
 ## Quick Start
 
@@ -114,7 +114,7 @@ Matching is **word-boundary** based and applies an inflection stoplist (`runtime
 | Tier | Price | Scans | Features |
 |------|-------|-------|----------|
 | Free | $0 | 5/month | Basic risk scan, CCS-signed reports, match-rate evidence with window |
-| Pro | $49/mo | Unlimited | Full 229K risk DB, manual review, compliance reports (SOC2, ISO42001), API access |
+| Pro | $49/mo | Unlimited | Full census rule DB, manual review, compliance reports (SOC2, ISO42001), API access |
 | Enterprise | Custom | Unlimited | Custom rules, on-premise, SLA (99.9%), dedicated support |
 
 **Free tier: no credit card required. Email verification required.**
