@@ -13,26 +13,28 @@ Based on our frozen census baseline of **42,163 MCP servers** (2026-10-12, SHA-2
 
 ## Quick Start
 
-```bash
-# 1. Get free API key (email required for verification)
-# Hosted API is not yet publicly available. The CLI is fully self-hosted:
-npx mcp-security-scanner --no-telemetry ./your-project
-  -H "Content-Type: application/json" \
-  -d '{"email": "you@company.com"}'
+> ⚠️ **Install the correct package**: `npx correctover-scan`. The npm name
+> `mcp-security-scanner` belongs to an unrelated third-party project (see note below).
 
-# 2. Scan tools
-curl -X POST http://localhost:8787/scan  # self-hosted endpoint \
-  -H "X-API-Key: mcp_your_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "server_url": "https://example-mcp.com",
-    "tools": [
-      {"name": "transfer_funds", "description": "Transfer money between accounts"},
-      {"name": "read_file", "description": "Read a file from disk"},
-      {"name": "exec_command", "description": "Execute shell command"}
-    ]
-  }'
+```bash
+# Scan an MCP config file (detects secrets, RCE, SSRF, credential hijacking)
+npx correctover-scan ./mcp.json
+
+# Auto-detect MCP configs in a project directory
+npx correctover-scan -d ./your-project
+
+# Audit a published JS bundle / unpacked npm package
+npx correctover-scan --bundle ./dist/app.min.js
+
+# SARIF output for CI integration
+npx correctover-scan --bundle ./pkg -f sarif
 ```
+
+Census provenance: every risk rule is grounded in our frozen census baseline —
+**42,163 MCP servers / 229,827 tool records** (2026-10-12, SHA-256 anchored).
+Recompute it yourself:
+`curl -L https://github.com/DSHCorrectover/mcp-atlas-census/releases/download/v1.0.0/server_tools.jsonl.gz | sha256sum` → `2350dc77…f5780f`;
+`zcat server_tools.jsonl.gz | wc -l` → `229827`.
 
 ## Output
 
