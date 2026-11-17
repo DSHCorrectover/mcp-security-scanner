@@ -1,3 +1,8 @@
+> ⚠️ **DEPRECATED — merged into [`correctover-scan`](https://github.com/DSHCorrectover/correctover-scan)** (npm: `correctover-scan`, the maintained scanner: 32 releases, config + bundle checks, current v3.5.0).
+> This repo is kept frozen for history; new issues and PRs should go to correctover-scan. See the archive note below for what this variant uniquely did.
+
+**What this variant uniquely did:** open-source framing + secret-leak checks (sk_live_/connection-string class, fixed in v3.5.0 lineage upstream).
+
 # MCP Security Scanner
 
 [**Commercial verification engagements — USD 8,000–15,000, court-ready dossier**](https://dshcorrectover.github.io/correctover-recovery-admission/services.html) · [**Independent audit & conformance**](https://dshcorrectover.github.io/correctover-recovery-admission/services.html)
